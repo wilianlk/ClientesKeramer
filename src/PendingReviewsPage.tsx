@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 interface HistorialEdicionDto {
     cust: string;
@@ -27,13 +29,47 @@ const PendingReviewsPage: React.FC = () => {
     const [historial, setHistorial] = useState<HistorialEdicionDto[]>([]);
     const [cargando, setCargando] = useState(false);
     const [error, setError] = useState("");
-    const [mensaje, setMensaje] = useState("");
+    const [filtro, setFiltro] = useState("");
+
+    // Determina la clase de borde lateral (borde izquierdo) según el estado
+    const getStatusBorderClass = (estado: string): string => {
+        switch (estado) {
+            case "Aprobado":
+                return "border-l-green-500";
+            case "Rechazado":
+                return "border-l-red-500";
+            default:
+                return "border-l-yellow-500"; // Pendiente
+        }
+    };
+
+    // Crea una etiqueta (badge) en la esquina superior derecha con color según el estado
+    const getStatusBadge = (estado: string): JSX.Element => {
+        let badgeClass = "";
+        let text = estado;
+        switch (estado) {
+            case "Aprobado":
+                badgeClass = "bg-green-500 text-white";
+                break;
+            case "Rechazado":
+                badgeClass = "bg-red-500 text-white";
+                break;
+            default:
+                badgeClass = "bg-yellow-400 text-black"; // Pendiente
+                text = "Pendiente";
+                break;
+        }
+        return (
+            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
+                {text}
+            </span>
+        );
+    };
 
     useEffect(() => {
         const cargarHistorial = async () => {
             setCargando(true);
             setError("");
-            setMensaje("");
             try {
                 const respuesta = await fetch("https://localhost:7198/api/ClientesKeramer/historial-ediciones");
                 if (!respuesta.ok) {
@@ -43,6 +79,7 @@ const PendingReviewsPage: React.FC = () => {
                 setHistorial(datos);
             } catch (err: any) {
                 setError(err.message || "Error desconocido");
+                toast.error(err.message || "Error desconocido");
             } finally {
                 setCargando(false);
             }
@@ -67,9 +104,10 @@ const PendingReviewsPage: React.FC = () => {
                 throw new Error(errorData.message || "Error al restaurar");
             }
             const resultado = await respuesta.json();
-            setMensaje(resultado.message || "Restauración exitosa");
+            toast.success(resultado.message || "Restauración exitosa");
         } catch (err: any) {
             setError(err.message);
+            toast.error(err.message);
         }
     };
 
@@ -88,62 +126,113 @@ const PendingReviewsPage: React.FC = () => {
 
         if (nuevoEstado === "Aprobado") {
             await restaurar(registro);
+        } else if (nuevoEstado === "Rechazado") {
+            toast.info("Estado cambiado a Rechazado");
         }
     };
 
-    return (
-        <div className="p-4">
-            <h1 className="text-2xl font-bold mb-4">Historial de Ediciones</h1>
-            {cargando && <p>Cargando...</p>}
-            {error && <p className="text-red-600">{error}</p>}
-            {mensaje && <p className="text-green-600">{mensaje}</p>}
+    // Filtrado básico por `cust`
+    const registrosFiltrados = historial.filter((reg) =>
+        reg.cust.toLowerCase().includes(filtro.toLowerCase())
+    );
 
-            {!cargando && historial.length === 0 ? (
-                <p>No hay registros en historial_ediciones.</p>
+    return (
+        <div className="p-4 min-h-screen bg-gray-50">
+            <ToastContainer />
+            <h1 className="text-2xl font-bold mb-4">Historial de Ediciones</h1>
+
+            {/* Barra de búsqueda / filtro */}
+            <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Buscar por Cliente (cust):</label>
+                <input
+                    type="text"
+                    value={filtro}
+                    onChange={(e) => setFiltro(e.target.value)}
+                    placeholder="Ej: 123456"
+                    className="border border-gray-300 rounded px-3 py-1 text-sm w-full sm:w-64"
+                />
+            </div>
+
+            {cargando && <p className="text-blue-500">Cargando...</p>}
+            {error && <p className="text-red-600">{error}</p>}
+
+            {!cargando && registrosFiltrados.length === 0 ? (
+                <p className="text-gray-600">No se encontraron registros.</p>
             ) : (
                 <div className="space-y-6">
-                    {historial.map((reg, idx) => (
-                        <div key={idx} className="border rounded p-4 bg-white shadow-sm">
-                            <h2 className="text-lg font-semibold mb-2">
-                                Registro {idx + 1} - Cliente: {reg.cust}
-                            </h2>
-                            <div className="grid grid-cols-2 gap-4">
+                    {registrosFiltrados.map((reg, idx) => (
+                        <div
+                            key={`${reg.cust}-${reg.fechaEdicion}`}
+                            className={`border rounded shadow-sm bg-white p-4 relative ${getStatusBorderClass(
+                                reg.estado
+                            )} border-l-4`}
+                        >
+                            {/* Encabezado con Título y Badge de Estado */}
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-lg font-semibold text-gray-800">
+                                    Registro {idx + 1} - Cliente: {reg.cust}
+                                </h2>
+                                {getStatusBadge(reg.estado)}
+                            </div>
+
+                            {/* Contenido dividido en 2 columnas */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-4 md:gap-y-2">
                                 {/* Columna Izquierda: Información Actual */}
                                 <div>
                                     <h3 className="font-bold mb-2 text-gray-700">Información Actual</h3>
-                                    <table className="min-w-full text-sm">
-                                        <tbody>
+                                    <table className="table-fixed w-full text-sm border-collapse">
+                                        <colgroup>
+                                            <col className="w-24" />
+                                            <col className="w-auto" />
+                                        </colgroup>
+                                        <tbody className="divide-y divide-gray-200">
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Nombre:</th>
-                                            <td>{reg.actualName}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Nombre:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualName}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Dirección:</th>
-                                            <td>{reg.actualAddr}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Dirección:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualAddr}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Dirección 2:</th>
-                                            <td>{reg.actualAddr2}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Dirección 2:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualAddr2}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Teléfono:</th>
-                                            <td>{reg.actualTele}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Teléfono:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualTele}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Correo:</th>
-                                            <td>{reg.actualEmail}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Correo:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualEmail}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Territorio:</th>
-                                            <td>{reg.actualTeri}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Territorio:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualTeri}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Código Postal:</th>
-                                            <td>{reg.actualZip}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Código Postal:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualZip}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Resal:</th>
-                                            <td>{reg.actualResal}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Resal:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.actualResal}</td>
                                         </tr>
                                         </tbody>
                                     </table>
@@ -152,55 +241,84 @@ const PendingReviewsPage: React.FC = () => {
                                 {/* Columna Derecha: Información a Editar */}
                                 <div>
                                     <h3 className="font-bold mb-2 text-gray-700">Información a Editar</h3>
-                                    <table className="min-w-full text-sm">
-                                        <tbody>
+                                    <table className="table-fixed w-full text-sm border-collapse">
+                                        <colgroup>
+                                            <col className="w-24" />
+                                            <col className="w-auto" />
+                                        </colgroup>
+                                        <tbody className="divide-y divide-gray-200">
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Cliente:</th>
-                                            <td>{reg.cust}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Cliente:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.cust}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Fecha Edición:</th>
-                                            <td>{new Date(reg.fechaEdicion).toLocaleString()}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Fecha Edición:
+                                            </th>
+                                            <td className="py-1 text-gray-800">
+                                                {new Date(reg.fechaEdicion).toLocaleString()}
+                                            </td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Nombre:</th>
-                                            <td>{reg.name}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Nombre:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.name}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Dirección:</th>
-                                            <td>{reg.addr}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Dirección:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.addr}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Dirección 2:</th>
-                                            <td>{reg.addr2}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Dirección 2:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.addr2}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Teléfono:</th>
-                                            <td>{reg.tele}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Teléfono:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.tele}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Correo:</th>
-                                            <td>{reg.email}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Correo:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.email}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Territorio:</th>
-                                            <td>{reg.teri}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Territorio:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.teri}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Código Postal:</th>
-                                            <td>{reg.zip}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Código Postal:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.zip}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Resal:</th>
-                                            <td>{reg.resal}</td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Resal:
+                                            </th>
+                                            <td className="py-1 text-gray-800">{reg.resal}</td>
                                         </tr>
                                         <tr>
-                                            <th className="pr-2 text-right font-semibold">Estado:</th>
-                                            <td>
+                                            <th className="text-right pr-1 py-1 font-semibold text-gray-700 whitespace-nowrap">
+                                                Estado:
+                                            </th>
+                                            <td className="py-1 text-gray-800">
                                                 <select
                                                     value={reg.estado}
                                                     onChange={(e) => cambiarEstado(reg, e.target.value)}
                                                     className="border rounded px-2 py-1"
+                                                    disabled={reg.estado !== "Pendiente"}
                                                 >
                                                     <option value="Pendiente">Pendiente</option>
                                                     <option value="Aprobado">Aprobado</option>
