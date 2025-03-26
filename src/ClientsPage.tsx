@@ -9,6 +9,9 @@ import {
     flexRender,
 } from "@tanstack/react-table";
 
+import "react-toastify/dist/ReactToastify.css";
+import { ToastContainer, toast } from "react-toastify";
+
 // Tipos
 
 interface Canal {
@@ -17,15 +20,17 @@ interface Canal {
 }
 
 interface Address {
-    id: string;       // cs.cs_cust
-    csName: string;   // cs.cs_name
-    csAddr: string;   // cs.cs_addr
-    csAddr2: string;  // cs.cs_addr2
-    csTele: string;   // cs.cs_tele
-    csEmail: string;  // xcs.xcs_email
-    csTeri: string;   // cs.cs_teri
-    csZip: string;    // cs.cs_zip
-    resal: string;    // c.cm_resal
+    id: string;
+    csName: string;
+    csAddr: string;
+    csAddr2: string;
+    csTele: string;
+    csEmail: string;
+    csTeri: string;
+    csZip: string;
+    resal: string;
+    // Nueva propiedad para indicar si la dirección está en estado pendiente
+    isPending?: boolean;
 }
 
 interface ClienteAPI {
@@ -50,6 +55,8 @@ interface ClienteAPI {
         csTeri: string;
         csZip: string;
         resal: string;
+        // Se espera que el backend ahora envíe esta propiedad
+        isPending?: boolean;
     };
 }
 
@@ -61,7 +68,6 @@ interface Client {
     addresses: Address[];
 }
 
-// Interfaz para la respuesta paginada
 interface PagedResult<T> {
     items: T[];
     totalCount: number;
@@ -79,14 +85,25 @@ const AddressTable: React.FC<{
         { header: "Calle", accessorKey: "csAddr" },
         {
             header: "Acciones",
-            cell: ({ row }) => (
-                <button
-                    onClick={() => onEdit(row.original)}
-                    className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
-                >
-                    Editar
-                </button>
-            ),
+            cell: ({ row }) => {
+                const address = row.original;
+                // Si la dirección está pendiente, mostrar un indicador
+                if (address.isPending) {
+                    return (
+                        <div className="bg-yellow-400 font-bold">
+                            Pendiente
+                        </div>
+                    );
+                }
+                return (
+                    <button
+                        onClick={() => onEdit(address)}
+                        className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                    >
+                        Editar
+                    </button>
+                );
+            },
         },
     ], [onEdit]);
 
@@ -126,7 +143,7 @@ const AddressTable: React.FC<{
     );
 };
 
-// Vista móvil (tarjetas)
+// Componente MobileClientList (vista móvil)
 const MobileClientList: React.FC<{
     clients: Client[];
     onEditAddress: (addr: Address) => void;
@@ -141,7 +158,6 @@ const MobileClientList: React.FC<{
                         <p><strong>Ciudad:</strong> {client.city}</p>
                         <p><strong>Canal:</strong> {client.channel}</p>
                     </div>
-                    {/* Direcciones */}
                     {client.addresses && client.addresses.length > 0 && (
                         <div className="mt-2 border-t pt-2">
                             <p className="font-semibold">Direcciones:</p>
@@ -150,12 +166,16 @@ const MobileClientList: React.FC<{
                                     <p><strong>ID:</strong> {addr.id}</p>
                                     <p><strong>Nombre:</strong> {addr.csName}</p>
                                     <p><strong>Calle:</strong> {addr.csAddr}</p>
-                                    <button
-                                        onClick={() => onEditAddress(addr)}
-                                        className="mt-2 px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
-                                    >
-                                        Editar Dirección
-                                    </button>
+                                    {addr.isPending ? (
+                                        <div className="text-red-600 font-bold">Pendiente</div>
+                                    ) : (
+                                        <button
+                                            onClick={() => onEditAddress(addr)}
+                                            className="mt-2 px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                                        >
+                                            Editar Dirección
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -166,8 +186,27 @@ const MobileClientList: React.FC<{
     );
 };
 
+// Función para POST en historial de edición utilizando toast en lugar de alert
+const postHistorialEdicion = async (data: any) => {
+    try {
+        const response = await fetch("https://localhost:7198/api/ClientesKeramer/historial-edicion", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) {
+            throw new Error(`Error al guardar: ${response.statusText}`);
+        }
+        const result = await response.json();
+        console.log("Guardado con éxito en historial:", result);
+        toast.success("Datos guardados en el historial correctamente.");
+    } catch (error) {
+        console.error(error);
+        toast.error("Ocurrió un error al guardar en el historial.");
+    }
+};
+
 const App: React.FC = () => {
-    // Estados para canales, clientes, filtros, paginación y carga
     const [channels, setChannels] = useState<Canal[]>([]);
     const [selectedChannel, setSelectedChannel] = useState("");
     const [clients, setClients] = useState<Client[]>([]);
@@ -177,16 +216,14 @@ const App: React.FC = () => {
     const [pageSize, setPageSize] = useState(50);
     const [totalCount, setTotalCount] = useState(0);
 
-    // Modal y edición (solo direcciones)
     const [modalOpen, setModalOpen] = useState(false);
     const [editType, setEditType] = useState<"address" | null>(null);
     const [selectedRecord, setSelectedRecord] = useState<Address | null>(null);
 
-    // Estados para filtros en móvil
     const [mobileSearchId, setMobileSearchId] = useState("");
     const [mobileSearchName, setMobileSearchName] = useState("");
 
-    // 1. Obtener canales
+    // Obtener canales
     useEffect(() => {
         fetch("https://localhost:7198/api/ClientesKeramer/canales")
             .then((res) => res.json())
@@ -194,7 +231,7 @@ const App: React.FC = () => {
             .catch((error) => console.error("Error al obtener canales:", error));
     }, []);
 
-    // 2. Obtener clientes al cambiar de canal o paginación
+    // Obtener clientes al cambiar de canal o paginación
     useEffect(() => {
         if (!selectedChannel) {
             setClients([]);
@@ -221,6 +258,7 @@ const App: React.FC = () => {
                         csTeri: item.direccionEnvio?.csTeri || "",
                         csZip: item.direccionEnvio?.csZip || "",
                         resal: item.direccionEnvio?.resal || "",
+                        isPending: item.direccionEnvio?.isPending || false,
                     };
                     return {
                         id: item.id,
@@ -237,7 +275,7 @@ const App: React.FC = () => {
             .finally(() => setIsLoading(false));
     }, [selectedChannel, pageIndex, pageSize]);
 
-    // Actualizar filtros de la tabla cuando cambien los inputs móviles
+    // Actualizar filtros para móvil
     useEffect(() => {
         const filters = [];
         if (mobileSearchId.trim() !== "") {
@@ -249,7 +287,7 @@ const App: React.FC = () => {
         setColumnFilters(filters);
     }, [mobileSearchId, mobileSearchName]);
 
-    // Definición de columnas (versión escritorio)
+    // Definición de columnas para la tabla (escritorio)
     const columns = useMemo<ColumnDef<Client, any>[]>(() => [
         {
             id: "expander",
@@ -304,7 +342,6 @@ const App: React.FC = () => {
         },
     ], []);
 
-    // Tabla de escritorio
     const table = useReactTable<Client>({
         data: clients,
         columns,
@@ -329,51 +366,26 @@ const App: React.FC = () => {
         getRowCanExpand: () => true,
     });
 
-    // Filas filtradas
     const filteredRows = table.getRowModel().rows;
-    // Convertir a Client[]
     const filteredClients = filteredRows.map((row) => row.original);
 
-    // Editar dirección
     const handleEditAddress = (address: Address) => {
         setSelectedRecord(address);
         setEditType("address");
         setModalOpen(true);
     };
 
-    // Cerrar modal
     const closeModal = () => {
         setModalOpen(false);
         setSelectedRecord(null);
         setEditType(null);
     };
 
-    // POST en historial-edicion
-    const postHistorialEdicion = async (data: any) => {
-        try {
-            const response = await fetch("https://localhost:7198/api/ClientesKeramer/historial-edicion", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) {
-                throw new Error(`Error al guardar: ${response.statusText}`);
-            }
-            const result = await response.json();
-            console.log("Guardado con éxito en historial:", result);
-            alert("Datos guardados en el historial correctamente.");
-        } catch (error) {
-            console.error(error);
-            alert("Ocurrió un error al guardar en el historial.");
-        }
-    };
-
-    // Guardar cambios de dirección
     const handleSave = async () => {
         console.log("Guardado", editType, selectedRecord);
         if (editType === "address" && selectedRecord) {
             const payload = {
-                cust: selectedRecord.id,  // cs.cs_cust
+                cust: selectedRecord.id,
                 fechaEdicion: new Date().toISOString(),
                 name: selectedRecord.csName,
                 addr: selectedRecord.csAddr,
@@ -393,9 +405,7 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 flex items-start justify-center">
-            {/* Layout responsivo: en móvil, tarjetas; en escritorio, tabla */}
             <div className="flex flex-col md:flex-row gap-4 w-full max-w-6xl">
-                {/* Selector de canal */}
                 <div className="w-full md:w-auto">
                     <label className="block text-gray-700 text-sm mb-2">
                         Seleccionar Canal:
@@ -417,9 +427,7 @@ const App: React.FC = () => {
                     </select>
                 </div>
 
-                {/* Vista móvil (tarjetas) */}
                 <div className="block md:hidden w-full">
-                    {/* Dos campos de filtro en móvil */}
                     <div className="my-2 space-y-2">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">
@@ -447,13 +455,11 @@ const App: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Lista de tarjetas con data filtrada */}
                     <MobileClientList
                         clients={filteredClients}
                         onEditAddress={handleEditAddress}
                     />
 
-                    {/* Paginación en móvil */}
                     <div className="mt-4 flex items-center justify-center gap-4">
                         <button
                             onClick={() => table.previousPage()}
@@ -478,7 +484,6 @@ const App: React.FC = () => {
                     )}
                 </div>
 
-                {/* Vista escritorio (tabla) */}
                 <div className="relative hidden md:block flex-1 bg-white shadow-lg rounded-lg p-6 sm:p-4">
                     <div className="overflow-x-auto w-full">
                         <table className="table-auto w-full border border-gray-200">
@@ -569,7 +574,6 @@ const App: React.FC = () => {
                 </div>
             </div>
 
-            {/* Modal de edición (solo para direcciones) */}
             {modalOpen && selectedRecord && (
                 <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
                     <div className="bg-white rounded-lg shadow-lg p-6 w-96 text-left">
@@ -577,7 +581,6 @@ const App: React.FC = () => {
                             Editar Dirección
                         </h2>
 
-                        {/* ID (normalmente no editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">ID:</label>
                             <input
@@ -588,7 +591,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Nombre (no editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Nombre:</label>
                             <input
@@ -599,7 +601,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Calle (editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Calle:</label>
                             <input
@@ -612,7 +613,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Dirección 2 (editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Dirección 2:</label>
                             <input
@@ -625,7 +625,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Teléfono (editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Teléfono:</label>
                             <input
@@ -638,7 +637,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Correo (editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Correo:</label>
                             <input
@@ -651,7 +649,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Territorio (no editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Territorio:</label>
                             <input
@@ -662,7 +659,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Código Postal (no editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Código Postal:</label>
                             <input
@@ -673,7 +669,6 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Resal (no editable) */}
                         <div className="flex items-center mb-2">
                             <label className="w-24 text-sm text-gray-700 text-right mr-2">Resal:</label>
                             <input
@@ -701,6 +696,8 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <ToastContainer />
         </div>
     );
 };
