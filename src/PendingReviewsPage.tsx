@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+// Definir la URL base a partir de las variables de entorno de Vite
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
 interface HistorialEdicionDto {
     cust: string;
     fechaEdicion: string;
@@ -43,10 +46,11 @@ const PendingReviewsPage: React.FC = () => {
         }
     };
 
-    // Crea una etiqueta (badge) en la esquina superior derecha con color según el estado
-    const getStatusBadge = (estado: string): JSX.Element => {
+    // Retorna la clase y el texto del badge según el estado
+    const getStatusInfo = (estado: string): { badgeClass: string; text: string } => {
         let badgeClass = "";
         let text = estado;
+
         switch (estado) {
             case "Aprobado":
                 badgeClass = "bg-green-500 text-white";
@@ -59,11 +63,11 @@ const PendingReviewsPage: React.FC = () => {
                 text = "Pendiente";
                 break;
         }
-        return (
-            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
-                {text}
-            </span>
-        );
+
+        return {
+            badgeClass: `px-2 py-1 text-xs font-semibold rounded-full ${badgeClass}`,
+            text
+        };
     };
 
     useEffect(() => {
@@ -71,7 +75,7 @@ const PendingReviewsPage: React.FC = () => {
             setCargando(true);
             setError("");
             try {
-                const respuesta = await fetch("https://localhost:7198/api/ClientesKeramer/historial-ediciones");
+                const respuesta = await fetch(`${API_BASE_URL}/api/ClientesKeramer/historial-ediciones`);
                 if (!respuesta.ok) {
                     throw new Error("Error al obtener historial_ediciones");
                 }
@@ -94,7 +98,7 @@ const PendingReviewsPage: React.FC = () => {
                 cust: registro.cust,
                 fechaEdicion: registro.fechaEdicion,
             };
-            const respuesta = await fetch("https://localhost:7198/api/ClientesKeramer/restaurar-historial", {
+            const respuesta = await fetch(`${API_BASE_URL}/api/ClientesKeramer/restaurar-historial`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
@@ -112,7 +116,7 @@ const PendingReviewsPage: React.FC = () => {
     };
 
     /**
-     * Cambiar el estado (Pendiente, Aprobado, Rechazado).
+     * Cambia el estado del registro (Pendiente, Aprobado, Rechazado).
      * Si se selecciona "Aprobado", invoca la restauración.
      */
     const cambiarEstado = async (registro: HistorialEdicionDto, nuevoEstado: string) => {
@@ -131,7 +135,7 @@ const PendingReviewsPage: React.FC = () => {
         }
     };
 
-    // Filtrado básico por `cust`
+    // Filtrado básico por 'cust'
     const registrosFiltrados = historial.filter((reg) =>
         reg.cust.toLowerCase().includes(filtro.toLowerCase())
     );
@@ -172,7 +176,10 @@ const PendingReviewsPage: React.FC = () => {
                                 <h2 className="text-lg font-semibold text-gray-800">
                                     Registro {idx + 1} - Cliente: {reg.cust}
                                 </h2>
-                                {getStatusBadge(reg.estado)}
+                                {(() => {
+                                    const { badgeClass, text } = getStatusInfo(reg.estado);
+                                    return <span className={badgeClass}>{text}</span>;
+                                })()}
                             </div>
 
                             {/* Contenido dividido en 2 columnas */}

@@ -12,6 +12,9 @@ import {
 import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer, toast } from "react-toastify";
 
+// Definir la URL base a partir de las variables de entorno de Vite
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
 // Tipos
 
 interface Canal {
@@ -90,7 +93,7 @@ const AddressTable: React.FC<{
                 // Si la dirección está pendiente, mostrar un indicador
                 if (address.isPending) {
                     return (
-                        <div className="bg-yellow-400 font-bold">
+                        <div className="text-yellow-400 font-bold">
                             Pendiente
                         </div>
                     );
@@ -167,7 +170,7 @@ const MobileClientList: React.FC<{
                                     <p><strong>Nombre:</strong> {addr.csName}</p>
                                     <p><strong>Calle:</strong> {addr.csAddr}</p>
                                     {addr.isPending ? (
-                                        <div className="text-red-600 font-bold">Pendiente</div>
+                                        <div className="text-yellow-400 font-bold">Pendiente</div>
                                     ) : (
                                         <button
                                             onClick={() => onEditAddress(addr)}
@@ -189,7 +192,7 @@ const MobileClientList: React.FC<{
 // Función para POST en historial de edición utilizando toast en lugar de alert
 const postHistorialEdicion = async (data: any) => {
     try {
-        const response = await fetch("https://localhost:7198/api/ClientesKeramer/historial-edicion", {
+        const response = await fetch(`${API_BASE_URL}/api/ClientesKeramer/historial-edicion`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data),
@@ -225,7 +228,7 @@ const App: React.FC = () => {
 
     // Obtener canales
     useEffect(() => {
-        fetch("https://localhost:7198/api/ClientesKeramer/canales")
+        fetch(`${API_BASE_URL}/api/ClientesKeramer/canales`)
             .then((res) => res.json())
             .then((data: Canal[]) => setChannels(data))
             .catch((error) => console.error("Error al obtener canales:", error));
@@ -240,7 +243,7 @@ const App: React.FC = () => {
 
         setIsLoading(true);
 
-        const url = `https://localhost:7198/api/ClientesKeramer/clientesCanalEnvioSimpleAsync?canalId=${selectedChannel}&page=${
+        const url = `${API_BASE_URL}/api/ClientesKeramer/clientesCanalEnvioSimpleAsync?canalId=${selectedChannel}&page=${
             pageIndex + 1
         }&pageSize=${pageSize}`;
 
