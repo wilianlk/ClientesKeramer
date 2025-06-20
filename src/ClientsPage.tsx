@@ -5,7 +5,6 @@ import {
     getCoreRowModel,
     getExpandedRowModel,
     getPaginationRowModel,
-    getFilteredRowModel,
     flexRender,
 } from "@tanstack/react-table";
 
@@ -241,11 +240,21 @@ const App: React.FC = () => {
             return;
         }
 
+
         setIsLoading(true);
 
-        const url = `${API_BASE_URL}/api/ClientesKeramer/clientesCanalEnvioSimpleAsync?canalId=${selectedChannel}&page=${
-            pageIndex + 1
-        }&pageSize=${pageSize}`;
+        const idFilter   = columnFilters.find(f => f.id === "id")?.value ?? "";
+        const nameFilter = columnFilters.find(f => f.id === "name")?.value ?? "";
+
+        const params = new URLSearchParams({
+            canalId:  selectedChannel,
+            page:     (pageIndex + 1).toString(),
+            pageSize: pageSize.toString(),
+        });
+        if (idFilter)   params.append("idFilter",   idFilter);
+        if (nameFilter) params.append("nameFilter", nameFilter);
+
+        const url = `${API_BASE_URL}/api/ClientesKeramer/clientesCanalEnvioSimpleAsync?${params.toString()}`;
 
         fetch(url)
             .then((res) => res.json())
@@ -276,7 +285,12 @@ const App: React.FC = () => {
             })
             .catch((err) => console.error("Error al obtener clientes:", err))
             .finally(() => setIsLoading(false));
-    }, [selectedChannel, pageIndex, pageSize]);
+    }, [selectedChannel, pageIndex, pageSize, columnFilters]);
+
+    useEffect(() => {
+        // Al cambiar cualquier filtro, volvemos siempre a la página 1
+        setPageIndex(0);
+    }, [columnFilters]);
 
     // Actualizar filtros para móvil
     useEffect(() => {
@@ -349,6 +363,7 @@ const App: React.FC = () => {
         data: clients,
         columns,
         manualPagination: true,
+        manualFiltering: true,
         pageCount: Math.ceil(totalCount / pageSize),
         state: {
             pagination: { pageIndex, pageSize },
@@ -362,15 +377,11 @@ const App: React.FC = () => {
         },
         onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
         getExpandedRowModel: getExpandedRowModel(),
         getPaginationRowModel: getPaginationRowModel(),
         getSubRows: () => undefined,
         getRowCanExpand: () => true,
     });
-
-    const filteredRows = table.getRowModel().rows;
-    const filteredClients = filteredRows.map((row) => row.original);
 
     const handleEditAddress = (address: Address) => {
         setSelectedRecord(address);
@@ -402,6 +413,20 @@ const App: React.FC = () => {
                 enter: "UsuarioActual",
             };
             await postHistorialEdicion(payload);
+
+            // Actualizar la dirección localmente para marcarla como pendiente
+            setSelectedRecord({ ...selectedRecord, isPending: true });
+            setClients((prevClients) =>
+                prevClients.map((client) => {
+                    const updatedAddresses = client.addresses.map((addr) => {
+                        if (addr.id === selectedRecord.id) {
+                            return { ...addr, isPending: true };
+                        }
+                        return addr;
+                    });
+                    return { ...client, addresses: updatedAddresses };
+                })
+            );
         }
         closeModal();
     };
@@ -430,61 +455,29 @@ const App: React.FC = () => {
                     </select>
                 </div>
 
-                <div className="block md:hidden w-full">
-                    <div className="my-2 space-y-2">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                                Filtrar por ID:
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="Ej: 123"
-                                value={mobileSearchId}
-                                onChange={(e) => setMobileSearchId(e.target.value)}
-                                className="w-full border rounded px-2 py-1 text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                                Filtrar por Nombre:
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="Ej: Juan"
-                                value={mobileSearchName}
-                                onChange={(e) => setMobileSearchName(e.target.value)}
-                                className="w-full border rounded px-2 py-1 text-sm"
-                            />
-                        </div>
-                    </div>
+                {/* — Filtros móviles — */}
+                <div className="block md:hidden w-full mb-4 space-y-2">
+                    <input
+                        type="text"
+                        placeholder="Filtrar ID"
+                        value={mobileSearchId}
+                        onChange={e => setMobileSearchId(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                    <input
+                        type="text"
+                        placeholder="Filtrar Nombre"
+                        value={mobileSearchName}
+                        onChange={e => setMobileSearchName(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                    />
+                </div>
 
+                <div className="block md:hidden w-full mb-4">
                     <MobileClientList
-                        clients={filteredClients}
+                        clients={clients}
                         onEditAddress={handleEditAddress}
                     />
-
-                    <div className="mt-4 flex items-center justify-center gap-4">
-                        <button
-                            onClick={() => table.previousPage()}
-                            disabled={!table.getCanPreviousPage()}
-                            className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-                        >
-                            Anterior
-                        </button>
-                        <span className="text-sm text-gray-700">
-                            Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-                        </span>
-                        <button
-                            onClick={() => table.nextPage()}
-                            disabled={!table.getCanNextPage()}
-                            className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-                        >
-                            Siguiente
-                        </button>
-                    </div>
-                    {isLoading && (
-                        <div className="mt-2 text-center text-blue-600">Cargando...</div>
-                    )}
                 </div>
 
                 <div className="relative hidden md:block flex-1 bg-white shadow-lg rounded-lg p-6 sm:p-4">
@@ -504,7 +497,7 @@ const App: React.FC = () => {
                             ))}
                             </thead>
                             <tbody>
-                            {table.getRowModel().rows.map((row) => (
+                            {table.getPaginationRowModel().rows.map((row) => (
                                 <React.Fragment key={row.id}>
                                     <tr className="hover:bg-gray-50">
                                         {row.getVisibleCells().map((cell) => (
@@ -667,8 +660,10 @@ const App: React.FC = () => {
                             <input
                                 type="text"
                                 value={selectedRecord.csZip || ""}
-                                disabled
-                                className="flex-1 px-2 py-1 border rounded text-sm bg-gray-100"
+                                onChange={(e) =>
+                                    setSelectedRecord({ ...selectedRecord, csZip: e.target.value })
+                                }
+                                className="flex-1 px-2 py-1 border rounded text-sm bg-white"
                             />
                         </div>
 

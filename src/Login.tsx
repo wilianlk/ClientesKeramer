@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from "react-router-dom";
+import {
+    BrowserRouter as Router,
+    Routes,
+    Route,
+    Link,
+    Navigate,
+} from "react-router-dom";
 import ClientsPage from "./ClientsPage";
 import PendingReviewsPage from "./PendingReviewsPage";
 import { ToastContainer, toast } from "react-toastify";
@@ -54,7 +60,10 @@ const Login: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen flex flex-col items-center bg-white text-black px-4 pt-12">
+        <div
+            className="min-h-screen bg-cover bg-center bg-no-repeat flex flex-col items-center justify-center px-4"
+            style={{ backgroundImage: "url('/fondo.jpg')" }}
+        >
             {/* Logo */}
             <img
                 src="/keramer.png"
@@ -63,16 +72,18 @@ const Login: React.FC = () => {
             />
 
             {/* Título */}
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-6 text-center tracking-wide">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-center tracking-wide text-black drop-shadow-md">
                 Sistema de actualización de BD clientes
             </h1>
 
             {/* Formulario */}
             <form
                 onSubmit={handleLogin}
-                className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md"
+                className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md"
             >
-                <h2 className="text-xl font-medium mb-4 text-center">Inicio de Sesión</h2>
+                <h2 className="text-xl font-medium mb-4 text-center">
+                    Inicio de Sesión
+                </h2>
 
                 <input
                     type="text"
@@ -82,7 +93,6 @@ const Login: React.FC = () => {
                     className="border p-2 w-full mb-3 bg-white text-black rounded"
                 />
 
-                {/* Campo contraseña con ícono alineado */}
                 <div className="relative mb-5">
                     <input
                         type={showPassword ? "text" : "password"}
