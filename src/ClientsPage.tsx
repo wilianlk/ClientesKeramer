@@ -240,27 +240,35 @@ const App: React.FC = () => {
             return;
         }
 
-
+        const controller = new AbortController();
+        const signal = controller.signal;
         setIsLoading(true);
 
         const idFilter   = columnFilters.find(f => f.id === "id")?.value ?? "";
         const nameFilter = columnFilters.find(f => f.id === "name")?.value ?? "";
 
         const params = new URLSearchParams({
-            canalId:  selectedChannel,
-            page:     (pageIndex + 1).toString(),
+            canalId: selectedChannel,
+            page: (pageIndex + 1).toString(),
             pageSize: pageSize.toString(),
         });
-        if (idFilter)   params.append("idFilter",   idFilter);
+        if (idFilter)   params.append("idFilter", idFilter);
         if (nameFilter) params.append("nameFilter", nameFilter);
 
         const url = `${API_BASE_URL}/api/ClientesKeramer/clientesCanalEnvioSimpleAsync?${params.toString()}`;
 
-        fetch(url)
-            .then((res) => res.json())
+        fetch(url, { signal })
+            .then((res) => {
+                if (!res.ok) throw new Error("Error en la respuesta");
+                return res.json();
+            })
             .then((result: PagedResult<ClienteAPI>) => {
-                const transformed = result.items.map((item) => {
-                    const direccion: Address = {
+                const transformed = result.items.map((item) => ({
+                    id: item.id,
+                    name: item.nombre,
+                    city: item.direccion,
+                    channel: item.canalId,
+                    addresses: [{
                         id: item.direccionEnvio?.id.trim() || "",
                         csName: item.direccionEnvio?.csName || "",
                         csAddr: item.direccionEnvio?.csAddr || "",
@@ -271,21 +279,22 @@ const App: React.FC = () => {
                         csZip: item.direccionEnvio?.csZip || "",
                         resal: item.direccionEnvio?.resal || "",
                         isPending: item.direccionEnvio?.isPending || false,
-                    };
-                    return {
-                        id: item.id,
-                        name: item.nombre,
-                        city: item.direccion,
-                        channel: item.canalId,
-                        addresses: [direccion],
-                    } as Client;
-                });
+                    }],
+                }));
                 setClients(transformed);
                 setTotalCount(result.totalCount);
             })
-            .catch((err) => console.error("Error al obtener clientes:", err))
+            .catch((err) => {
+                if (err.name === "AbortError") return; // Silenciar este error
+                console.error("Error al obtener clientes:", err);
+            })
             .finally(() => setIsLoading(false));
+
+        return () => {
+            controller.abort(); // 🔥 Cancelar la anterior
+        };
     }, [selectedChannel, pageIndex, pageSize, columnFilters]);
+
 
     useEffect(() => {
         // Al cambiar cualquier filtro, volvemos siempre a la página 1
